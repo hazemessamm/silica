@@ -1,2 +1,2 @@
 # silica
-Silica team repo for BioLM hackathon
+Silica team repo for BioML hackathon
