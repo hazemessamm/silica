@@ -18,8 +18,8 @@ Columns are described as:
 
   * sequence: the AA sequence ordered
   * replicate: the number of replicate affinity assays performed
-  * expression: Adaptyv's assessment of protein expression
-  * binding: Adaptyv's call on antibody-antigen binding
+  * expression: Adaptyv's assessment of protein expression (use combined_expression)
+  * binding: Adaptyv's call on antibody-antigen binding (use combined_expression)
   * confidence: Adaptyv's assessment of confidence in calls
   * kd: Kd measurement for antibody-antigen
   * kon/koff: Kon and Koff for the same
@@ -30,6 +30,7 @@ Columns are described as:
   * sequence_lp: ESM2 sequence LP
   * tm_prediction: predicted Tms of sequence
   * aliphatic_index through mz: computed physiochemical properties from sequence
+  * combined_expression and combined_binding: BioLM's assessment of sequence across replicates
   * iptm_tm through pi_score: computed multimer confidence, docking, other scores
 
 
