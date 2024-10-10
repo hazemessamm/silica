@@ -12,17 +12,17 @@ numeric_features = [
     "aliphatic_index",
     "boman",
     "charge",
-    "descriptors",  # contains all descriptors so do not need physical_descriptors
+    "descriptors",  # Contains all descriptors so do not need physical_descriptors
     "frequencies",
     "hydrophobic_moment",
     "hydrophobicity",
     "instability_index",
     "isoelectric_point",
     "mass_shift",
-    # 'membrane_position_profile',  # may be useful, but may need to be parameterized ex: T, S
+    # 'membrane_position_profile',  # May be useful, but may need to be parameterized ex: T, S
     "molecular_weight",
     "mz",
-    #  'structural_class',  # may be useful, is the predicted structural class ex: alpha
+    #  'structural_class',  # May be useful, is the predicted structural class ex: alpha
 ]
 
 vector_features = [
