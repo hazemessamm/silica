@@ -9,7 +9,7 @@ See the [notebook](NB2_modal.ipynb) for python usage. The python implementation 
 ___
 For shell usage:
 ```shell
-modal run NB2_modal.py --sequences 'QVQLQESGGGLVQPGGSLRLSCAASGRTFSSYAMGWFRQAPGKQREFVAAIRWSGGYTYYTDSVKGRFTISRDNAKTTVYLQMNSLKPEDTAVYYCAATYLSSDYSRYALPQRPLDYDYWGQGTQVTVSSLEHHHHHH' --out-dir 'predicted_structures' --ids "EgA1"
+modal run NB2_modal.py --sequences 'QVQLQESGGGLVQPGGSLRLSCAASGRTFSSYAMGWFRQAPGKQREFVAAIRWSGGYTYYTDSVKGRFTISRDNAKTTVYLQMNSLKPEDTAVYYCAATYLSSDYSRYALPQRPLDYDYWGQGTQVTVSS' --out-dir 'predicted_structures' --ids "EgA1"
 ```
 ___
 If no ids are provided the pdbs will be saved with the index of the corresponding sequence in the input list and may overwrite previous results.
