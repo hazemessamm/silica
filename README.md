@@ -5,7 +5,7 @@ Silica team repo for BioML hackathon
 
 ### EGFR Affinity Data
 
-`[source_data/adaptyv_biolm_egfr_data.csv](source_data/adaptyv_biolm_egfr_data.csv)` 
+[`source_data/adaptyv_biolm_egfr_data.csv`](source_data/adaptyv_biolm_egfr_data.csv) 
 contains data from Adaptyv Bio's EGFR Competition Round 1 (202 sequences), plus 
 36 additional nanobody sequences ordered by BioLM.
 
