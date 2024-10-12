@@ -28,7 +28,9 @@ class ESM3:
             add_special_tokens=True,
             return_tensors="pt",
         )["input_ids"]
-        logits = self.model(input_ids).sequence_logits
+
+        with torch.no_grad():
+            logits = self.model(input_ids).sequence_logits
 
         if self.mask_special_tokens:
             logits[:, :, self._special_tokens] = -torch.inf
@@ -50,7 +52,8 @@ class ESM3:
             add_special_tokens=True,
             return_tensors="pt",
         )["input_ids"]
-        embeddings = self.model(input_ids).embeddings
+        with torch.no_grad():
+            embeddings = self.model(input_ids).embeddings
         if slice_cls:
             embeddings = embeddings[:, 1:, :]
         if slice_eos:

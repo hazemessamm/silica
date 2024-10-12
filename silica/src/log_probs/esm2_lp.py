@@ -29,13 +29,15 @@ class ESM2:
                 self.checkpoint
             )
             self._model_for_logits.to(device=self.device)
+            self._model_for_logits.eval()
 
         input_ids = self.tokenizer(
             sequence, add_special_tokens=True, return_tensors="pt"
         )["input_ids"]
         input_ids = input_ids.to(device=self.device)
 
-        logits = self._model_for_logits(input_ids=input_ids)["logits"]
+        with torch.no_grad():
+            logits = self._model_for_logits(input_ids=input_ids)["logits"]
 
         if self.mask_special_tokens:
             logits[:, :, self._special_tokens] = -torch.inf
@@ -53,6 +55,7 @@ class ESM2:
                 self.checkpoint,
             )
             self._model_for_embeddings.to(device=self.device)
+            self._model_for_embeddings.eval()
 
         input_ids = self.tokenizer(
             sequence,
@@ -60,7 +63,8 @@ class ESM2:
             return_tensors="pt",
         )["input_ids"]
         input_ids = input_ids.to(device=self.device)
-        embeddings = self._model_for_embeddings(input_ids=input_ids)
+        with torch.no_grad():
+            embeddings = self._model_for_embeddings(input_ids=input_ids)
         embeddings = embeddings["last_hidden_state"]
         if slice_cls:
             embeddings = embeddings[:, 1:, :]
