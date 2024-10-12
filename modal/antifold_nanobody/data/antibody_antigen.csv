@@ -1,0 +1,6 @@
+# Chain order should be Hchain, Lchain, other chains
+# If using esm_if1_mode, order does not matter
+# Any number of chains may be added
+pdb,Hchain,Lchain,chain3,chain4,chain5
+3hfm,H,L,,,
+3hfm,H,L,Y,,
