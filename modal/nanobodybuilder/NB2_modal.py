@@ -7,7 +7,7 @@ immune_builder_image = (
     modal.Image.micromamba(python_version="3.12").micromamba_install("openmm", "pdbfixer", channels=["conda-forge"]).apt_install("git", "wget").run_commands("git clone https://github.com/oxpig/ANARCI.git").micromamba_install("biopython", channels=["conda-forge"]).micromamba_install("hmmer=3.3.2", channels=["bioconda"]).run_commands("cd ANARCI && python setup.py install")
     .pip_install("ImmuneBuilder").apt_install("libopenblas-dev").run_commands("mkdir -p /app/NB2_weights").workdir("/app").run_commands("wget -O NB2_weights/nanobody_model_1 https://zenodo.org/record/7258553/files/nanobody_model_1?download=1", "wget -O NB2_weights/nanobody_model_2 https://zenodo.org/record/7258553/files/nanobody_model_2?download=1","wget -O NB2_weights/nanobody_model_3 https://zenodo.org/record/7258553/files/nanobody_model_3?download=1","wget -O NB2_weights/nanobody_model_4 https://zenodo.org/record/7258553/files/nanobody_model_4?download=1"))
     
-app = modal.App(name="NanoBodyBuilder2", image=immune_builder_image)
+app = modal.App(name="nanobodybuilder2", image=immune_builder_image)
 
 
 # Remote function that predicts the PDBs
