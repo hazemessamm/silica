@@ -4,6 +4,56 @@ from transformers import AutoModelForMaskedLM
 from transformers import AutoTokenizer
 
 
+def compute_sequence_log_probs(
+    sequence,
+    model,
+    tokenizer,
+    mask_special_tokens=True,
+    mask_cls_eos=True,
+    device="cuda",
+):
+    model.eval()
+    input_ids = tokenizer(
+        sequence, add_special_tokens=True, return_tensors="pt"
+    )["input_ids"]
+    input_ids = input_ids.to(device=device)
+
+    with torch.no_grad():
+        logits = model(input_ids=input_ids)["logits"]
+
+    if mask_special_tokens:
+        special_tokens = [1, 3, 29, 30, 31, 32]
+        if mask_cls_eos:
+            special_tokens.extend([0, 2])
+
+        logits[:, :, special_tokens] = -torch.inf
+    log_probs = torch.log_softmax(logits, dim=-1)
+    gathered_log_probs = log_probs.gather(-1, input_ids.unsqueeze(-1))
+    if mask_cls_eos:
+        gathered_log_probs = gathered_log_probs[:, 1:-1, :]
+    return gathered_log_probs.sum() / input_ids.shape[-1]
+
+
+def compute_sequence_embeddings(
+    sequence, model, tokenizer, slice_cls=False, slice_eos=False, device="cuda"
+):
+    model.eval()
+    input_ids = tokenizer(
+        sequence,
+        add_special_tokens=True,
+        return_tensors="pt",
+    )["input_ids"]
+    input_ids = input_ids.to(device=device)
+    with torch.no_grad():
+        embeddings = model(input_ids=input_ids)
+    embeddings = embeddings["last_hidden_state"]
+    if slice_cls:
+        embeddings = embeddings[:, 1:, :]
+    if slice_eos:
+        embeddings = embeddings[:, :-1, :]
+    return embeddings
+
+
 class ESM2:
     def __init__(
         self,
@@ -31,21 +81,15 @@ class ESM2:
             self._model_for_logits.to(device=self.device)
             self._model_for_logits.eval()
 
-        input_ids = self.tokenizer(
-            sequence, add_special_tokens=True, return_tensors="pt"
-        )["input_ids"]
-        input_ids = input_ids.to(device=self.device)
-
-        with torch.no_grad():
-            logits = self._model_for_logits(input_ids=input_ids)["logits"]
-
-        if self.mask_special_tokens:
-            logits[:, :, self._special_tokens] = -torch.inf
-        log_probs = torch.log_softmax(logits, dim=-1)
-        gathered_log_probs = log_probs.gather(-1, input_ids.unsqueeze(-1))
-        if self.mask_cls_eos:
-            gathered_log_probs = gathered_log_probs[:, 1:-1, :]
-        return gathered_log_probs.sum() / input_ids.shape[-1]
+        output = compute_sequence_log_probs(
+            sequence,
+            self._model_for_logits,
+            self.tokenizer,
+            self.mask_special_tokens,
+            self.mask_cls_eos,
+            self.device,
+        )
+        return output
 
     def compute_sequence_embeddings(
         self, sequence, slice_cls=False, slice_eos=False
@@ -57,17 +101,12 @@ class ESM2:
             self._model_for_embeddings.to(device=self.device)
             self._model_for_embeddings.eval()
 
-        input_ids = self.tokenizer(
+        embeddings = compute_sequence_embeddings(
             sequence,
-            add_special_tokens=True,
-            return_tensors="pt",
-        )["input_ids"]
-        input_ids = input_ids.to(device=self.device)
-        with torch.no_grad():
-            embeddings = self._model_for_embeddings(input_ids=input_ids)
-        embeddings = embeddings["last_hidden_state"]
-        if slice_cls:
-            embeddings = embeddings[:, 1:, :]
-        if slice_eos:
-            embeddings = embeddings[:, :-1, :]
+            self._model_for_embeddings,
+            self.tokenizer,
+            slice_cls,
+            slice_eos,
+            self.device,
+        )
         return embeddings

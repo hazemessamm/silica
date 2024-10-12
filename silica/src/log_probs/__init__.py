@@ -1,2 +1,2 @@
-from silica.src.log_probs.esm2_lp import ESM2
-from silica.src.log_probs.esm3_lp import ESM3
+from silica.src.log_probs import esm2_lp # noqa
+from silica.src.log_probs import esm3_lp # noqa
