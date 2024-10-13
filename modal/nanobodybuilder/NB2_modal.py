@@ -18,10 +18,12 @@ def predict_structure(sequences):
     # Model class
     predictor = NanoBodyBuilder2(weights_dir = "NB2_weights")
     results=[]
+    assert isinstance(sequences, (str, list, tuple))
 
     # Iteratively Predict
     # TODO: Check batching
-    for seq in sequences:
+    sequences_mod = [sequences] if isinstance(sequences, str) else sequences
+    for seq in sequences_mod:
         output_file = f"{seq}.pdb"
         nanobody = predictor.predict({'H': seq})
         nanobody.save(output_file)
@@ -31,7 +33,7 @@ def predict_structure(sequences):
             results.append(pdb_str)
         if os.path.isfile(output_file):
             os.remove(output_file)
-    return results
+    return results[0] if isinstance(sequences, str) else results
 
 
 # Local function that saves PDBs
