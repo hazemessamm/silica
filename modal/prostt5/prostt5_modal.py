@@ -102,6 +102,7 @@ def inverse_fold(gen_kwargs, seq_dict):
 @app.local_entrypoint()
 def main(
     pdb,
+    foldseek_path="~/foldseek/bin/foldseek",
     top_p=0.85,
     temperature=1.0,
     top_k=3,
@@ -132,11 +133,9 @@ def main(
     src = os.path.join(query_id, "queryDB_h")
     src_filename = os.path.join(query_id, "queryDB_ss")
 
-    os.system(f"~/foldseek/bin/foldseek createdb {query_id} {db}")
-    os.system(f"~/foldseek/bin/foldseek lndb {src} {dst_query_filename}")
-    os.system(
-        f"~/foldseek/bin/foldseek convert2fasta {src_filename} {fasta_path}"
-    )
+    os.system(f"{foldseek_path} createdb {query_id} {db}")
+    os.system(f"{foldseek_path} lndb {src} {dst_query_filename}")
+    os.system(f"{foldseek_path} convert2fasta {src_filename} {fasta_path}")
     fasta_file = os.path.join(query_id, "queryDB_ss.fasta")
     seq_dict = read_fasta(fasta_file, is_3Di=True)
     output = inverse_fold.remote(gen_kwargs, seq_dict)
