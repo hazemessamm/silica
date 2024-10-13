@@ -2,6 +2,7 @@ import modal
 import os
 import tempfile
 import shutil
+import re
 
 
 
@@ -30,6 +31,16 @@ class AntiFold:
     def run_antifold(self, pdb_contents, hchain, lchain, regions_to_mut,
                      num_seqs, t, nanobody=False,
                      batch_size=1, logits=False, logprobs=False):
+        """
+        Returns
+        -------
+        {'sequences': OrderedDict([('temp_pdb_H', SeqRecord(seq=Seq('EVQLVESGGGLLSCAASGRTFSSYAMGWFRQAPGKEREFVVAINWSSGSTYYAD...QVT'),
+        id='temp_pdb_H', name='', description=", score=1.1935, global_score=1.1935,
+        regions=['CDR3'], model_name=AntiFold, seed=42", dbxrefs=[])),
+        ('temp_pdb_H__1', SeqRecord(seq=Seq('EVQLVESGGGLLSCAASGRTFSSYAMGWFRQAPGKEREFVVAINWSSGSTYYAD...QVT'), id='', name='',
+        description='T=2.50, sample=1, score=2.9150, global_score=1.3810, seq_recovery=0.8621, mutations=16', dbxrefs=[]))])}
+        """
+
         import antifold.main
         import pandas as pd
 
@@ -79,6 +90,55 @@ class AntiFold:
             # Cleanup temporary files and directory
             if tmpdirname and os.path.exists(tmpdirname):
                 shutil.rmtree(tmpdirname)
+
+    @modal.method()
+    def score_single_seq(self, sequence):
+        f = modal.Function.from_name('nanobodybuilder2', 'predict_structure')
+        pdb_str = f.remote(sequence)
+        results = AntiFold.run_antifold.remote(
+            pdb_contents=pdb_str,
+            hchain='H',
+            lchain=None,
+            regions_to_mut='CDR1',
+            num_seqs=1,
+            t=0.2,
+            nanobody=True,
+            batch_size=1,
+            logits=False,
+            logprobs=False
+        )
+        parent = results['sequences']['temp_pdb_H']
+        score, global_score = self.extract_scores(parent.description)
+        return score, global_score
+
+    @modal.method()
+    def score_single_pdb_str(self, pdb_contents):
+        results = AntiFold.run_antifold.remote(
+            pdb_contents=pdb_contents,
+            hchain='H',
+            lchain=None,
+            regions_to_mut='CDR1',
+            num_seqs=1,
+            t=0.2,
+            nanobody=True,
+            batch_size=1,
+            logits=False,
+            logprobs=False
+        )
+        parent = results['sequences']['temp_pdb_H']
+        score, global_score = self.extract_scores(parent.description)
+        return score, global_score
+
+    def extract_scores(self, description):
+        score_match = re.search(r'score=([\d.]+)', description)
+        global_score_match = re.search(r'global_score=([\d.]+)', description)
+
+        score = float(score_match.group(1)) if score_match else None
+        global_score = float(global_score_match.group(1)) if global_score_match else None
+
+        return score, global_score
+
+
 
 
 @app.local_entrypoint()
