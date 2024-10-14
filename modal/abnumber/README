@@ -1,0 +1,45 @@
+# Silica Modal
+
+This repository contains the code for the Silica Modal project.
+
+## Prerequisites
+
+- [Anaconda](https://www.anaconda.com/products/individual) installed
+
+## Setup
+
+1. Install Anaconda by following the instructions provided on the [Anaconda website](https://www.anaconda.com/products/individual).
+
+2. Clone the repository:
+
+    ```shell
+    git clone https://github.com/your-username/silica-modal.git
+    ```
+
+3. Change into the project directory:
+
+    ```shell
+    cd /Users/tompritsky/projects/silica/silica/modal/abnumber
+    ```
+
+4. Create a new Conda environment from the YAML file:
+
+    ```shell
+    conda env create -f environment.yml -n silica-modal
+    ```
+
+5. Activate the Conda environment:
+
+    ```shell
+    conda activate silica-modal
+    ```
+
+## Usage
+
+To run the "modal" command-line tool, use the following command. Note, for scheme you can use imgt, chothia, kabat, or aho. For seq, you can pass a single sequence as a string (for single submission) or a CSV file with all sequences in the first column (for batch submission).:
+```modal run test_modal.py --scheme "imgt" --seq "test_modal_seqs.csv"
+```
+
+
+
+
