@@ -61,7 +61,7 @@ modal run FindCDRs.py --scheme "imgt" --seq "test_modal_seqs.csv"
     ```bash
     modal run FindCDRs.py --scheme "imgt" --seq "QVQLVQSGGGLVQP"
     ```
-  - A **CSV file** with sequences listed in the first column for batch processing. Example:
+  - A **CSV file** with sequences listed in the 'sequence' column for batch processing. Outputs 'results.csv', a copy of the original with an additional column for cdr positions. Example:
     ```bash
     modal run FindCDRs.py --scheme "imgt" --seq "test_modal_seqs.csv"
     ```

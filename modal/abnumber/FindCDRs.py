@@ -52,11 +52,12 @@ def read_sequences_from_csv(filepath):
     sequences = []
     try:
         with open(filepath, 'r') as csvfile:
-            reader = csv.reader(csvfile)
+            reader = csv.DictReader(csvfile)
             for row in reader:
-                # Assuming the sequence is in the first column and not empty
-                if row and row[0].strip():
-                    sequences.append(clean_non_ascii(row[0].strip()))
+                # Assuming the column name is 'sequence' and the value is not empty
+                sequence = row.get('sequence', '').strip()
+                if sequence:
+                    sequences.append(clean_non_ascii(sequence))
         if not sequences:
             raise ValueError("The CSV file is empty or contains no valid sequences.")
     except Exception as e:
@@ -68,9 +69,11 @@ def read_sequences_from_csv(filepath):
 def main(seq: str, scheme: str):
 
     #check if the sequence is a file path
+    df = None
     if os.path.isfile(seq):
         print(f"Reading sequences from file: {seq}")
         sequences = read_sequences_from_csv(seq)
+        df = pd.read_csv(seq)
     else:
         print(f"Processing single sequence: {seq})")
         sequences = [seq]
@@ -84,7 +87,7 @@ def main(seq: str, scheme: str):
         result_list.append((seq, result))
 
     # save results to a csv file. First column is the sequence, second column is the result
-    df = pd.DataFrame(result_list, columns=['Sequence', 'Indices'])
-    df.to_csv('results.csv', index=False)
+    df['abnumber_indices'] = [str(result) for seq, result in result_list]
+    df.to_csv('results.csv', index=False, header=True)
     
     return result_list
