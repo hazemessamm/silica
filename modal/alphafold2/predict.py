@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import modal
 import numpy as np
 import sys
 
@@ -23,6 +24,18 @@ from alphafold.model import config
 from alphafold.model import model
 
 import af2_util
+
+# Define the Modal stub
+app = modal.Stub("af2-runner")
+# Define the Modal image
+image = modal.Image.debian_slim().pip_install(
+    "numpy",
+    "jax",
+    "alphafold",
+    "pyrosetta",
+    "biopython"
+)
+
 
 parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(parent, 'include'))
@@ -534,39 +547,46 @@ class StructManager():
 ####### Main #######
 ####################
 
-device = xla_bridge.get_backend().platform
-if device == 'gpu':
-    print('/' * 60)
-    print('/' * 60)
-    print('Found GPU and will use it to run AF2')
-    print('/' * 60)
-    print('/' * 60)
-    print('\n')
-else:
-    print('/' * 60)
-    print('/' * 60)
-    print('WARNING! No GPU detected running AF2 on CPU')
-    print('/' * 60)
-    print('/' * 60)
-    print('\n')
+@app.function(image=image, concurrency_limit=5, gpu="A100")
+def run_af2(args):
+    parser = argparse.ArgumentParser()
+    # Add all your original arguments here
+    parser.add_argument("-pdbdir", type=str, default="", help='The name of a directory of pdbs to run through the model')
+    parser.add_argument("-silent", type=str, default="", help='The name of a silent file to run through the model')
+    parser.add_argument("-outpdbdir", type=str, default="outputs", help='The directory to which the output PDB files will be written. Only used when -pdbdir is active')
+    parser.add_argument("-outsilent", type=str, default="out.silent", help='The name of the silent file to which output structs will be written. Only used when -silent is active')
+    parser.add_argument("-runlist", type=str, default='', help="The path of a list of pdb tags to run. Only used when -pdbdir is active (default: ''; Run all PDBs)")
+    parser.add_argument("-checkpoint_name", type=str, default='check.point', help="The name of a file where tags which have finished will be written (default: check.point)")
+    parser.add_argument("-scorefilename", type=str, default='out.sc', help="The name of a file where scores will be written (default: out.sc)")
+    parser.add_argument("-maintain_res_numbering", action="store_true", default=False, help='When active, the model will not renumber the residues when bad inputs are encountered (default: False)')
+    parser.add_argument("-debug", action="store_true", default=False, help='When active, errors will cause the script to crash and the error message to be printed out (default: False)')
+    parser.add_argument("-max_amide_dist", type=float, default=3.0, help='The maximum distance between an amide bond\'s carbon and nitrogen (default: 3.0)')
+    parser.add_argument("-recycle", type=int, default=3, help='The number of AF2 recycles to perform (default: 3)')
+    parser.add_argument("-no_initial_guess", action="store_true", default=False, help='When active, the model will not use an initial guess (default: False)')
+    parser.add_argument("-force_monomer", action="store_true", default=False, help='When active, the model will predict the structure of a monomer (default: False)')
+    
+    args = parser.parse_args(args)
 
-struct_manager = StructManager(args)
-af2_runner     = AF2_runner(args, struct_manager)
+    struct_manager = StructManager(args)
+    af2_runner = AF2_runner(args, struct_manager)
 
-for pdb in struct_manager.iterate():
+    for pdb in struct_manager.iterate():
+        if args.debug:
+            af2_runner.process_struct(pdb)
+        else:
+            try:
+                af2_runner.process_struct(pdb)
+            except KeyboardInterrupt:
+                print("Script killed by Control+C, exiting")
+                break
+            except Exception as e:
+                print(f"Struct with tag {pdb} failed with error: {str(e)}")
 
-    if args.debug: af2_runner.process_struct(pdb)
+        struct_manager.record_checkpoint(pdb)
 
-    else: # When not in debug mode the script will continue to run even when some poses fail
-        t0 = timer()
+@app.local_entrypoint()
+def main(pdbdir: str, outpdbdir: str, recycle: int = 3):
+    run_af2.remote(["-pdbdir", pdbdir, "-outpdbdir", outpdbdir, "-recycle", str(recycle)])
 
-        try: af2_runner.process_struct(pdb)
-
-        except KeyboardInterrupt: sys.exit( "Script killed by Control+C, exiting" )
-
-        except:
-            seconds = int(timer() - t0)
-            print( "Struct with tag %s failed in %i seconds with error: %s"%( pdb, seconds, sys.exc_info()[0] ) )
-
-    # We are done with one pdb, record that we finished
-    struct_manager.record_checkpoint(pdb)
+if __name__ == "__main__":
+    app.run()
