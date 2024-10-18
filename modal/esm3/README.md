@@ -23,7 +23,7 @@
 * Name the secret `esm3-api-token` and select "Create"
 
 * If using the open model change the constants to reflect that and also add your HF token to a secret
-* KEY = HF_TOKN
+* KEY = HF_TOKEN
 * secret name =  hf-api-token
 
 ## Run the application (no writes to BQ)

@@ -1,6 +1,7 @@
 # app.py
 
 import os
+import json
 import modal
 from constants import DEFAULT_BQ_SCREEN_RESULTS_TABLE
 
@@ -26,7 +27,8 @@ image = modal.Image.from_registry(
     timeout=600,
     volumes={"/vol": model_volume},  # Mount the volume at "/vol"
     secrets=[
-        modal.Secret.from_name("gcp-biolm-hackathon-bq-secret")
+        modal.Secret.from_name("gcp-biolm-hackathon-bq-secret"),
+        modal.Secret.from_name("esm3-secrett")
     ],  # Include the GCP BQ secret
 )
 class ESMModel:

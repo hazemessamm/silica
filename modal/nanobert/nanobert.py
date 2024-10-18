@@ -112,6 +112,23 @@ class Model:
         self.tokenizer = RobertaTokenizer.from_pretrained("/app/nanoBERT", return_tensors="pt")
         self.vocab = self.tokenizer.get_vocab()
         self.model = AutoModelForMaskedLM.from_pretrained("/app/nanoBERT").to(self.device)
+
+
+        self.bq_client = None
+        try:
+            # Load credentials from the environment variable set by the Modal secret
+            credentials_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+            credentials = service_account.Credentials.from_service_account_info(credentials_info)
+
+            # Create a BigQuery client
+            self.bq_client = bigquery.Client(credentials=credentials, project=credentials_info["project_id"])
+
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            print("Traceback information:")
+            traceback.print_exc()  # This will print the full stack trace for debugging.
+            print(f"Credentials info: {credentials_info if 'credentials_info' in locals() else 'Not loaded'}")
+            print(f"BigQuery client state: {'Initialized' if self.bq_client else 'Not initialized'}")
         
     def write_to_bigquery(self, results, table_id):
         # Insert data into BigQuery
@@ -162,8 +179,7 @@ class Model:
         # Step 10: Optionally move logits and embeddings back to CPU if needed for further processing
             logits = logits.cpu()
             embeddings = embeddings.cpu()
-            
-            logits = logits.cpu()
+ 
             # For each input in the batch, calculate the log probability for the sequence
             for batch_idx in range(input_ids.size(0)):  # Iterate over each sample in the batch
                 input_sequence = input_ids[batch_idx]

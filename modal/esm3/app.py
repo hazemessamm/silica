@@ -1,7 +1,5 @@
 import modal
 from pathlib import Path
-from torch.utils.data import DataLoader, Dataset
-from transformers import DataCollatorWithPadding
 from constants import DEFAULT_BQ_SCREEN_RESULTS_TABLE, ESM3_MODEL, ESM3_OPEN_MODEL
 
 import os
@@ -91,10 +89,12 @@ class TextDataset(Dataset):
 class Model:
     @modal.build()  # add another step to the image build
     def download_model_to_folder(self):
+        #have to authenticate with HF set HF_TOKEN in hf-api-token secret
         from huggingface_hub import snapshot_download, login
         login(os.environ["HF_TOKEN"], add_to_git_credential=True)
         os.makedirs("/app/esm3", exist_ok=True)
-        #snapshot_download("esm3-open", local_dir="/app/esm3")  # have to authenticate with HF set HF_TOKEN in hf-api-token secret
+        
+        #snapshot_download("esm3-open", local_dir="/app/esm3")  # uncomment to download weights
 
     @modal.enter()
     def setup(self):
@@ -118,6 +118,22 @@ class Model:
             self.model = ESM3.from_pretrained("esm3-open").to(self.device)
         else:
             self.model = client(ESM3_MODEL, token=os.environ["ESM3_API_TOKEN"])
+
+    self.bq_client = None
+        try:
+            # Load credentials from the environment variable set by the Modal secret
+            credentials_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+            credentials = service_account.Credentials.from_service_account_info(credentials_info)
+
+            # Create a BigQuery client
+            self.bq_client = bigquery.Client(credentials=credentials, project=credentials_info["project_id"])
+
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            print("Traceback information:")
+            traceback.print_exc()  # This will print the full stack trace for debugging.
+            print(f"Credentials info: {credentials_info if 'credentials_info' in locals() else 'Not loaded'}")
+            print(f"BigQuery client state: {'Initialized' if self.bq_client else 'Not initialized'}")
         
     def write_to_bigquery(self, results, table_id):
         # Insert data into BigQuery
