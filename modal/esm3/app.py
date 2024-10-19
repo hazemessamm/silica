@@ -10,7 +10,7 @@ import numpy as np
 
 # Build image and dependencies. Will be cached after build
 esm3_image = (
-    modal.Image.debian_slim(python_version="3.12").pip_install("torch",  "pandas", "esm", "huggingface")
+    modal.Image.debian_slim(python_version="3.12").pip_install("torch",  "pandas", "esm", "huggingface", "google-cloud-bigquery==3.26.0")
     .apt_install("libopenblas-dev", "git")
     .workdir("/app"))  #.pip_install("esm@https://github.com/evolutionaryscale/esm.git")
     
@@ -60,21 +60,6 @@ def calculate_sequence_max_log_probability(logits, input_ids):
 
 
 
-
-class TextDataset(Dataset):
-    def __init__(self, texts, methods, metadata):
-        self.texts = texts
-        self.methods = methods  # List of strings (methods)
-        self.metadata = metadata  # List of JSON objects (metadata)
-
-    def __len__(self):
-        return len(self.texts)
-
-    def __getitem__(self, idx):
-        # Return text, methods, and metadata for each entry
-        return self.texts[idx], self.methods[idx], self.metadata[idx]
-
-
 # attach gpu if using local model
 @app.cls(
     image=esm3_image,
@@ -94,7 +79,7 @@ class Model:
         login(os.environ["HF_TOKEN"], add_to_git_credential=True)
         os.makedirs("/app/esm3", exist_ok=True)
         
-        #snapshot_download("esm3-open", local_dir="/app/esm3")  # uncomment to download weights
+        snapshot_download("EvolutionaryScale/esm3-sm-open-v1", local_dir="/app/esm3")  # local model not tested 
 
     @modal.enter()
     def setup(self):
@@ -114,35 +99,38 @@ class Model:
         from esm.sdk import client
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        if ESM3_OPEN_MODEL:
-            self.model = ESM3.from_pretrained("esm3-open").to(self.device)
+        if ESM3_OPEN_MODEL:  ## Not working tested
+            self.model = ESM3.from_pretrained("/app/esm3").to(self.device)
         else:
             self.model = client(ESM3_MODEL, token=os.environ["ESM3_API_TOKEN"])
-
-    self.bq_client = None
+        # Try loading BQ client
+        import json
+        from google.cloud import bigquery
+        from google.oauth2 import service_account
+        self.bq_client = None
         try:
             # Load credentials from the environment variable set by the Modal secret
             credentials_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
             credentials = service_account.Credentials.from_service_account_info(credentials_info)
-
+    
             # Create a BigQuery client
             self.bq_client = bigquery.Client(credentials=credentials, project=credentials_info["project_id"])
-
+    
         except Exception as e:
             print(f"Error: {str(e)}")
             print("Traceback information:")
             traceback.print_exc()  # This will print the full stack trace for debugging.
             print(f"Credentials info: {credentials_info if 'credentials_info' in locals() else 'Not loaded'}")
             print(f"BigQuery client state: {'Initialized' if self.bq_client else 'Not initialized'}")
-        
-    def write_to_bigquery(self, results, table_id):
-        # Insert data into BigQuery
-        errors = self.bq_client.insert_rows_json(table_id, results)  # results is a list of dicts
-
-        if errors:
-            print(f"Encountered errors while inserting rows: {errors}")
-        else:
-            print(f"Inserted {len(results)} rows into {table_id}")
+            
+        def write_to_bigquery(self, results, table_id):
+            # Insert data into BigQuery
+            errors = self.bq_client.insert_rows_json(table_id, results)  # results is a list of dicts
+    
+            if errors:
+                print(f"Encountered errors while inserting rows: {errors}")
+            else:
+                print(f"Inserted {len(results)} rows into {table_id}")
 
     @modal.method()
     def inference_logits(self, seqs, subproject,

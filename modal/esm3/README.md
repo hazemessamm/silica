@@ -22,9 +22,10 @@
 * Paste `[the token]` into the "Value" box and select "Next".
 * Name the secret `esm3-api-token` and select "Create"
 
-* If using the open model change the constants to reflect that and also add your HF token to a secret
+* NOT TESTED If using the open model change the constants to reflect that and also add your HF token to a secret.
 * KEY = HF_TOKEN
 * secret name =  hf-api-token
+* Also attach GPU
 
 ## Run the application (no writes to BQ)
 ```python app.py```

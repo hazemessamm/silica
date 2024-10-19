@@ -11,7 +11,7 @@ import numpy as np
 
 # Build image and dependencies. Will be cached after build
 NanoBERT = (
-    modal.Image.debian_slim(python_version="3.12").pip_install("transformers", "torch", "sentence-transformers", "datasets", "accelerate", "sentence-transformers",  "pandas")
+    modal.Image.debian_slim(python_version="3.12").pip_install("transformers", "torch", "sentence-transformers", "datasets", "accelerate", "sentence-transformers",  "pandas", "google-cloud-bigquery==3.26.0")
     .apt_install("libopenblas-dev")
     .run_commands("mkdir -p /app/NB2_weights")
     .workdir("/app"))
@@ -112,7 +112,10 @@ class Model:
         self.tokenizer = RobertaTokenizer.from_pretrained("/app/nanoBERT", return_tensors="pt")
         self.vocab = self.tokenizer.get_vocab()
         self.model = AutoModelForMaskedLM.from_pretrained("/app/nanoBERT").to(self.device)
-
+        # Try loading BQ client
+        import json
+        from google.cloud import bigquery
+        from google.oauth2 import service_account
 
         self.bq_client = None
         try:
