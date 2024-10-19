@@ -1,6 +1,7 @@
 # app.py
 
 import os
+import json
 import modal
 from constants import DEFAULT_BQ_SCREEN_RESULTS_TABLE
 
@@ -26,7 +27,7 @@ image = modal.Image.from_registry(
     timeout=600,
     volumes={"/vol": model_volume},  # Mount the volume at "/vol"
     secrets=[
-        modal.Secret.from_name("gcp-biolm-hackathon-bq-secret")
+        modal.Secret.from_name("gcp-biolm-hackathon-bq-secret"),
     ],  # Include the GCP BQ secret
 )
 class ESMModel:
@@ -383,6 +384,159 @@ class ESMModel:
             print(f"Inserted {len(results)} rows into {table_id}")
 
 
+    @modal.method()
+    def screen_sequences_metadata(
+        self,
+        sequences,
+        subproject,
+        username,
+        methods,
+        method_metadatas,
+        write_to_bq=False,
+        bq_table_name=DEFAULT_BQ_SCREEN_RESULTS_TABLE,
+    ):
+        """
+        Screen a list of sequences using the ESM2 model and compute sequence log-probabilities.
+        Optionally write results to BigQuery.
+
+        Parameters:
+        - sequences (List[str]): A list of amino acid sequences to process.
+        - subproject (str): Identifier for the hackathon subproject that the sequences are associated with.
+        - username (str): Identifier for the hackathon participant who is submitting the sequences.
+        - method (str): The sequence generation method used (e.g., "mpnn").
+        - method_metadata (str): JSON string of metadata associated with the generation method.
+            This can be an empty dict or None.
+        - write_to_bq (bool): If True, write the results to BigQuery. Set to False to test the function without writing to BigQuery.
+        - bq_table_name (str): BigQuery table name where results should be written. Defaults to DEFAULT_BQ_SCREEN_RESULTS_TABLE.
+            Should remain the default unless there is another use-case requiring writing to a separate table.
+        """
+        import base64
+        import numpy as np
+
+        def log_sum_exp(logits):
+            """Applies the log-sum-exp trick for numerical stability"""
+            # Accepts a 1-dim logits vector
+            a_max = np.max(logits)
+            return a_max + np.log(np.sum(np.exp(logits - a_max)))
+
+        def calculate_sequence_max_log_probability(logits_list, sequence_tokens):
+            """
+            Computes the sequence log-probability using the provided logits and sequence tokens.
+            """
+
+            total_log_probability = 0
+
+            for index, logits in enumerate(logits_list):
+                if sequence_tokens[index] == "<mask>":
+                    # For masked positions, select the logit associated with the maximum prediction
+                    selected_logit = np.max(logits)
+                else:
+                    # For unmasked positions, select the logit associated with the wildtype residue
+                    wildtype_residue = sequence_tokens[index]
+                    wildtype_index = self.aa_alphabet.index(wildtype_residue)
+                    selected_logit = logits[wildtype_index]
+
+                # Normalize the selected logit against the logits distribution to compute the log probability
+                log_probability = selected_logit - log_sum_exp(logits)
+                total_log_probability += log_probability
+
+            return total_log_probability
+
+        # Run the forward pass
+        esm2_result_list = self.forward_pass.remote(
+            sequences=sequences,
+            repr_layers=[33],
+            include=["mean", "logits"],
+            max_sequence_len=2048
+        )
+
+        # Compute sequence log-probability and prepare results
+        results = []
+        for sequence, esm2_result, method, method_metadata in zip(sequences, esm2_result_list, methods, method_metadatas):
+
+            # Get the per-token logits
+            logits_list = esm2_result["logits"]  # Should be list of per-token logits
+
+            # Compute the log-probability
+            sequence_tokens = list(sequence)
+            sequence_lp = calculate_sequence_max_log_probability(logits_list, sequence_tokens)
+
+            # Compute the base64 encoded embedding
+            embedding_f32_l33 = esm2_result["mean_representations"]["33"]
+            embedding_f32_l33_bytes = base64.b64encode(
+                np.array(embedding_f32_l33, dtype=np.float32).tobytes()
+            ).decode("utf-8")
+
+            # Prepare the result dictionary
+            result = {
+                "sequence": sequence,
+                "subproject": subproject,  # Particular hackathon subproject
+                "username": username,      # Identifier for the participant submitting the sequence
+                "method": method,          # Sequence generation method used (e.g., "mpnn")
+                "method_metadata": method_metadata,  # JSON string of metadata associated with the generation method
+                "sequence_log_probability": sequence_lp,
+                "embedding_bytes": embedding_f32_l33_bytes,
+                "embedding_metadata": "esm2-650m-f32-l33"
+            }
+            results.append(result)
+
+        if write_to_bq:
+            # Write results to BigQuery
+            self.write_to_bigquery(results, bq_table_name)
+        else:
+            print("write_to_bq is False; results not written to BigQuery.")
+
+        return results
+
+
+
+
+def example_screen_sequences_metadata():
+    """
+    Example usage of the screen_sequences() method.
+    """
+    import json
+
+    sequences = [
+        "KVKLEESGGGLVQTGGSLRLTCAASGRTSRSYGMGWFRKAPGKEREFVSGISWRGDSTGYADSVKGRFTISRDNAKNTVDLQMNSLKPEDTAIYYCAAAAGSAWYGTLYEYDYWGQGTQVTVSS",
+        # Expected log-probability: -84.14707884
+        "MSLLQDVLEFNKKFVEEKKYELYETSKFPDQKMVILSCMDTRLVELLPHALNLRNGDVKIVQNAGALVSHPFGSIMRSILVAVYELQADEVCVIGHHDCGAGKLQAEPFLEKVRAQGISDEVINTIEYSMDLKQWLTGFDSVEETVQHSVETIRNHPLFLKDTPVHGLVIDPNTGKLDVVVNGYEAIENN",
+        # Expected log-probability: -119.64532
+        # Add more sequences as needed
+    ]
+
+    
+    subproject = "example-subproject"  # The particular hackathon subproject
+    username = "example-user"          # Identifier for the hackathon participant
+    methods = ["example-oracle"]*2          # The sequence generation method used
+    method_metadatas = [json.dumps({
+        "example-param1": "example-value1",
+        "example-param2": "example-value2"
+    })]*2  # JSON string of metadata associated with the generation method
+
+    write_to_bq = False  # Set to False for testing without writing to BigQuery
+    bq_table_name = DEFAULT_BQ_SCREEN_RESULTS_TABLE  # BigQuery table name
+
+    with app.run():
+        # Instantiate the ESMModel class
+        model = ESMModel()
+
+        # Call the screen_sequences method
+        result = model.screen_sequences_metadata.remote(
+            sequences,
+            subproject,
+            username,
+            methods,
+            method_metadatas,
+            write_to_bq,
+            bq_table_name,
+        )
+        print(result)
+
+
+
+
+
 def example_forward_pass():
     """
     Example usage of the forward_pass() method.
@@ -469,4 +623,5 @@ def example_screen_sequences():
 
 if __name__ == "__main__":
     # example_forward_pass()
-    example_screen_sequences()
+    # example_screen_sequences()
+    example_screen_sequences_metadata()  # finer control over metadata
