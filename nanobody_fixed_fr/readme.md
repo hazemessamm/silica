@@ -27,7 +27,7 @@ That's why we filtered our generated data taking the following into account:
 0. We used the script to generate 225 sequences.
 1. We renumbered the sequences (we used sadie with Chothia numbering) and removed the ones which had unprocessed 'follows' part after renumbering. If the whole nanobody was numbered before the generation, and it didn't work well after - it might not be nanobody any more.
 2. FR regions are highly conservative. It affects amino acids at certain positions, it also means that gaps are rare. We filtered out the sequences which had gaps in FR1.
-We also excluded from consideration sequences with 3 aa gap in FR3: this gap was labeled as possible by our team's antibody expert.
+We also excluded from consideration sequences with 3 aa gap in FR3: this gap was labeled as a possible error by our team's antibody expert.
 3. We also did Cysteines check and removed all generated sequences which had this amino acid on any positions except 2 where this aminoacid appears almost constantly
 4. Since we focused on CDR changes, we needed some additional way to understand if our Frankenstein nanobody is still a nanobody. To check this, we decided to compare the  embeddings for generated vs. real nanobodies.
   * We've decided that our `real nanobodies` dataset will be this one: https://research.naturalantibody.com/static/downloads/patent_sequence.tsv.gz (patent nanobody sequences)
