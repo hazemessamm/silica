@@ -1,7 +1,3 @@
-import os
-os.environ["WANDB_PROJECT"] = "BioxMLHackathon"
-os.environ["WANDB_NOTEBOOK_NAME"] = "/home/ec2-user/SageMaker/stability_pred_dora_norm.ipynb"
-# os.environ["WANDB_MODE"] = "disabled"
 import random
 import numpy as np
 import pandas as pd
