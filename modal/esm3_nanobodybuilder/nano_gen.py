@@ -1,5 +1,6 @@
 import modal
 from huggingface_hub import HfApi
+import pandas as pd
 
 from esm.utils.structure.protein_chain import ProteinChain
 from esm.sdk import client
@@ -30,7 +31,8 @@ from pathlib import Path
 
 import torch
 
-# Create a Docker image from the specified Dockerfile
+# Create a Docker container. Here we use the official nvidia pytorch
+# Note that this also takes in the Forge token. Make sure it exists, so that the routine has access to ESM3 API.
 docker_image = (
     modal.Image.from_registry("nvcr.io/nvidia/pytorch:22.12-py3", add_python="3.11")
     .apt_install("git")  # Install git if needed
@@ -41,15 +43,17 @@ docker_image = (
 # Create or access a Modal volume
 volume = modal.Volume.from_name("hackaton_volume", create_if_missing=True)
 MOUNT_DIR = "/data"
-local_directory = "/Users/Cellini/codes/hackaton"
 
 pdb_id = "4KRO"  # PDB ID corresponding to EGFR
 chain_id = "B"  # Chain ID corresponding to the nanobody in the PDB complex
 
 file_tag = "nano_ir_id"  # use this to prepend to the file names
+run_id_csv_tag = "metrics_run_v2339.csv"
+
+# Number of seeds determines how many rounds we generate. Be mindful using the large model will take more time.
 NUM_SEEDS = 10
 
-# Basic sequence definitions
+# Basic sequence definitions - we obtained the fasta sequence from the relevant fasta in the PDB entry
 # cut off the His tag
 # seq from the fasta
 seq_fasta = 'QVQLQESGGGLVQPGGSLRLSCAASGRTFSSYAMGWFRQAPGKQREFVAAIRWSGGYTYYTDSVKGRFTISRDNAKTTVYLQMNSLKPEDTAVYYCAATYLSSDYSRYALPQRPLDYDYWGQGTQVTVSSLEHHHHHH'
@@ -58,6 +62,7 @@ while seq_fasta[len(seq_fasta)-i-1] == 'H':
     i += 1
 seq_clean = seq_fasta[:len(seq_fasta)-i]
 
+# this is important to set it right, otherwise the run will be interrupted with the FunctionTimeOut error
 timeout = 86000  # seconds - this is now set to almost 24h
 
 # Define a Modal app using the custom container image
@@ -65,6 +70,12 @@ app = modal.App("esm3_model", image=docker_image)
 
 @app.function()
 def get_sample_protein():
+
+    '''
+    This function is used to get a base ESMProtein object that is prepared with the relevant annotations and data
+    which can be used as an initial state for downstream prompting and generation.
+    '''
+
     egfr_nano_chain = ProteinChain.from_rcsb(pdb_id, chain_id)
     # convert it to ESMProtein object to enable function annotation
     protein = ESMProtein.from_protein_chain(egfr_nano_chain)
@@ -72,6 +83,7 @@ def get_sample_protein():
     modelled_res = egfr_nano_chain.residue_index_no_insertions  # numbering starts from 1; adjust later for python-friendly numbering
     seq = egfr_nano_chain.sequence  # seq from the pdb
 
+    # CDRs are retrieved from SabDaB 'https://www.google.com/url?q=https%3A%2F%2Fopig.stats.ox.ac.uk%2Fwebapps%2Fsabdab-sabpred%2Fsabdab%2Fcdrsearch%2F%3Fpdb%3D4KRO%26CDRdef_pdb%3DChothia'
     CDR1 = 'GRTFSSY' # 	CDRH1
     CDR2 = 'RWSGGY' # CDRH2
     CDR3 = 'TYLSSDYSRYALPQRPLDYDY' # CDRH3
@@ -87,53 +99,55 @@ def get_sample_protein():
         cdr_dict[cdr_id]['fasta_pos'] = [_i for _i in range(idx_fasta, idx_fasta+len(cdr))]
         cdr_dict[cdr_id]['res'] = cdr
 
-    # binding sites are based on seq_fasta; posistions are python friendly, i.e. 0 based
+    # Binding sites and heterodimer interface are extracted from 'https://www.ebi.ac.uk/interpro/result/InterProScan/iprscan5-R20241015-221717-0261-42684762-p1m/'
+    # Note that for the function annotation the start and end positions must be 1-indexed as per esm3 github.
+    # Keywords should be compatible with the allowed function annotations, either existing InterPro tags or keyword. This requires
+    # some careful mining of the relevant tokenizers
     binding_sites = [{
-        'val': 32,
-        'keyword': 'CDD - cd04981',
+        'val': 33,
+        'keyword': 'antigen binding',  # 'CDD - cd04981',
         }, {
-        'val': 49,
-        'keyword': 'CDD - cd04981'
+        'val': 50,
+        'keyword': 'antigen binding',  # 'CDD - cd04981',
         }, {
-        'val': 98,
-        'keyword': 'CDD - cd04981'
+        'val': 99,
+        'keyword': 'antigen binding',  # 'CDD - cd04981',
         }]
 
-    h_dimer_interface = [
-        {
-        'val': 38,
-        'keyword': 'CDD - cd04981'
+    h_dimer_interface = [{
+        'val': 39,
+        'keyword': 'interface',  # 'CDD - cd04981'
         },
         {
-        'val': 42,
-        'keyword': 'CDD - cd04981'
+        'val': 43,
+        'keyword': 'interface',  # 'CDD - cd04981'
         },
         {
-        'val': 46,
-        'keyword': 'CDD - cd04981'
+        'val': 47,
+        'keyword': 'interface',  # 'CDD - cd04981'
         },
         {
-        'val': 94,
-        'keyword': 'CDD - cd04981'
-        },
-        {
-        'val': 119,
-        'keyword': 'CDD - cd04981'
+        'val': 95,
+        'keyword': 'interface',  # 'CDD - cd04981'
         },
         {
         'val': 120,
-        'keyword': 'CDD - cd04981'
+        'keyword': 'interface',  # 'CDD - cd04981'
+        },
+        {
+        'val': 121,
+        'keyword': 'interface',  # 'CDD - cd04981'
         }]
 
     # construct the prompts
 
     _sites_bind = [
-        FunctionAnnotation(label="antigen_binding_site", start=binding_site['val'], end=binding_site['val']+1)
+        FunctionAnnotation(label=binding_site['keyword'], start=binding_site['val'], end=binding_site['val']+1)
         for binding_site in binding_sites
         ]
 
     _sites_interface = [
-        FunctionAnnotation(label="heterodimer_interface", start=interface_site['val'], end=interface_site['val']+1)
+        FunctionAnnotation(label=interface_site['keyword'], start=interface_site['val'], end=interface_site['val']+1)
         for interface_site in h_dimer_interface
         ]
 
@@ -162,17 +176,13 @@ def run_model_and_save_pdbs():
         )
 
     print("login was successful")
+
     # prepare the data
-    pdb_id = "4KRO"  # PDB ID corresponding to EGFR
-    chain_id = "B"  # Chain ID corresponding to the nanobody in the PDB complex
     egfr_nano_chain = ProteinChain.from_rcsb(pdb_id, chain_id)
     modelled_res = egfr_nano_chain.residue_index_no_insertions
     # convert it to ESMProtein object to enable function annotation
     egfr_nano_chain = ESMProtein.from_protein_chain(egfr_nano_chain)
-
-    # seq from the fasta
-    seq_fasta = 'QVQLQESGGGLVQPGGSLRLSCAASGRTFSSYAMGWFRQAPGKQREFVAAIRWSGGYTYYTDSVKGRFTISRDNAKTTVYLQMNSLKPEDTAVYYCAATYLSSDYSRYALPQRPLDYDYWGQGTQVTVSSLEHHHHHH'
-    seq = egfr_nano_chain.sequence  # seq from the pdb
+    seq = egfr_nano_chain.sequence  # seq from the pdb that will likely be different to the seq_fasta as there can be unmodelled residues.
 
     CDR1 = 'GRTFSSY' # 	CDRH1
     CDR2 = 'RWSGGY' # CDRH2
@@ -189,7 +199,9 @@ def run_model_and_save_pdbs():
         cdr_dict[cdr_id]['fasta_pos'] = [_i for _i in range(idx_fasta, idx_fasta+len(cdr))]
         cdr_dict[cdr_id]['res'] = cdr
 
-    # binding sites are based on seq_fasta; posistions are python friendly, i.e. 0 based
+    # Binding sites and interface are based on seq_fasta; posistions are python friendly, i.e. 0 based
+    # This is slightly different than the function annotation that goes into the ESMProtein object.
+    # The reason for this is that we use these positions to mask out the sequence, hence the 0-based positions.
     binding_sites = [{
         'val': 32,
         'keyword': 'CDD - cd04981',
@@ -234,8 +246,6 @@ def run_model_and_save_pdbs():
     get_sample_protein_call = get_sample_protein.spawn()
     protein = get_sample_protein_call.get()
 
-    print("this worked so far...")
-
     # Now the sequence generation first - mask out the CDRs, plus the binding site
     _cdr_mask = []
     for _, val in cdr_dict.items():
@@ -261,23 +271,39 @@ def run_model_and_save_pdbs():
     # get the corresponding structure prompt
     structure_prompt = torch.full((len(seq_prompt), 37, 3), np.nan)
 
-
     structure_prompt[structure_motif_pos] = torch.tensor(
         structure_mofif
     )
 
-    # print("Structure prompt shape: ", structure_prompt.shape)
-    # print(
-    #     "Indices with structure conditioning: ",
-    #     torch.where(~torch.isnan(structure_prompt).any(dim=-1).all(dim=-1))[0].tolist(),
-    # )
-
-
     # SEEDS
-    seeds = np.random.randint(0, 10**6, size=NUM_SEEDS)
+    seeds = np.random.randint(0, 10**5, size=NUM_SEEDS)
+
+    metrics_dict = {
+            'tag': [],
+            'seq_seq_gen': [],
+            'seq_struct_gen': [],
+            'seq_inv_fold_gen': [],
+            'sequence_ptm': [],
+            'sequence_plddt': [],
+            'structure_ptm': [],
+            'structure_plddt': [],
+            'inv_fold_ptm': [],
+            'inv_fold_plddt': [],
+        }
 
     for _nr, seed in enumerate(seeds):
         print(f"generating nr: {_nr} and seed: {seed}")
+        # populate the round with dummy values, as the generation steps may fail, but we still want to keep track of it
+        metrics_dict['tag'].append(str(seed))
+        metrics_dict['seq_seq_gen'].append(None)
+        metrics_dict['seq_struct_gen'].append(None)
+        metrics_dict['seq_inv_fold_gen'].append(None)
+        metrics_dict['sequence_ptm'].append(None)
+        metrics_dict['sequence_plddt'].append(None)
+        metrics_dict['structure_ptm'].append(None)
+        metrics_dict['structure_plddt'].append(None)
+        metrics_dict['inv_fold_ptm'].append(None)
+        metrics_dict['inv_fold_plddt'].append(None)
 
         try:
 
@@ -296,6 +322,13 @@ def run_model_and_save_pdbs():
             sequence_generation = model.generate(protein_prompt, sequence_generation_config)
 
             assert isinstance(sequence_generation, ESMProtein)
+            # update the metrics
+            metrics_dict['seq_seq_gen'].pop()
+            metrics_dict['seq_seq_gen'].append(sequence_generation.sequence)
+            metrics_dict['sequence_ptm'].pop()
+            metrics_dict['sequence_ptm'].append(sequence_generation.ptm.numpy().item())
+            metrics_dict['sequence_plddt'].pop()
+            metrics_dict['sequence_plddt'].append(sequence_generation.plddt.numpy())
 
             seq_gen_file_name = f"{file_tag}_tag_{seed}_seq_gen.pdb"
             seq_gen_pdb_path = Path(MOUNT_DIR) / seq_gen_file_name
@@ -316,21 +349,20 @@ def run_model_and_save_pdbs():
             )
 
             assert isinstance(structure_prediction, ESMProtein)
+            metrics_dict['seq_struct_gen'].pop()
+            metrics_dict['seq_struct_gen'].append(structure_prediction.sequence)
+            metrics_dict['structure_ptm'].pop()
+            metrics_dict['structure_ptm'].append(structure_prediction.ptm.numpy().item())
+            metrics_dict['structure_plddt'].pop()
+            metrics_dict['structure_plddt'].append(structure_prediction.plddt.numpy())
 
             struct_gen_file_name = f"{file_tag}_tag_{seed}_struct_gen.pdb"
             struct_gen_pdb_path = Path(MOUNT_DIR) / struct_gen_file_name
             structure_prediction.to_pdb(str(struct_gen_pdb_path))
 
-            print(f"structure generated too...")
-
-
-            # Convert the generated structure to a back into a ProteinChain object
-            structure_prediction_chain = structure_prediction.to_protein_chain()
-
-
-            pdb_str = egfr_PC.to_pdb_string()
             _cdr_idxs = [idx+1 for idx, res in enumerate(seq_prompt) if res=='_']
 
+            # as an fun side - count the number of differring residues - this is not used later
             diffs = 0
             for idx in range(len(sequence_generation.sequence)):
                 if sequence_generation.sequence[idx] != seq_clean[idx]:
@@ -352,24 +384,17 @@ def run_model_and_save_pdbs():
                 GenerationConfig(track="sequence", schedule="cosine", num_steps=num_steps),
             )
             assert isinstance(inv_folded_protein, ESMProtein)
+            # update the metrics
+            metrics_dict['seq_inv_fold_gen'].pop()
+            metrics_dict['seq_inv_fold_gen'].append(inv_folded_protein.sequence)
+            metrics_dict['inv_fold_ptm'].pop()
+            metrics_dict['inv_fold_ptm'].append(inv_folded_protein.ptm.numpy().item())
+            metrics_dict['inv_fold_plddt'].pop()
+            metrics_dict['inv_fold_plddt'].append(inv_folded_protein.plddt.numpy())
 
             inv_fold_file_name = f"{file_tag}_tag_{seed}_inv_fold.pdb"
             inv_fold_pdb_path = Path(MOUNT_DIR) / inv_fold_file_name
-            protein.to_pdb(str(inv_fold_pdb_path))
-
-            # get logits
-            # protein = get_sample_protein()
-            # protein.coordinates = None
-            # protein.function_annotations = None
-            # protein.sasa = None
-            # protein_tensor = model.encode(protein)
-            # logits_output = model.logits(protein_tensor, LogitsConfig(sequence=True))
-            # assert isinstance(
-            #     logits_output, LogitsOutput
-            # ), f"LogitsOutput was expected but got {logits_output}"
-            # assert (
-            #     logits_output.logits is not None and logits_output.logits.sequence is not None
-            # )
+            inv_folded_protein.to_pdb(str(inv_fold_pdb_path))
 
             volume.commit()
 
@@ -377,41 +402,16 @@ def run_model_and_save_pdbs():
             print(f"{e} in round {_nr}")
             continue
 
-@app.function(image=docker_image)
-def download_files(volume, file_to_download, local_directory):
-    """Download a specified file from the volume to the local directory."""
+    # save the metrics
+    df = pd.DataFrame(metrics_dict)
+    csv_metrics_path = Path(MOUNT_DIR) / run_id_csv_tag
+    df.to_csv(str(csv_metrics_path))
 
-    # Ensure local directory exists
-    os.makedirs(local_directory, exist_ok=True)
-
-    # Download the specified file from the volume to the local directory
-    print(f"Downloading {file_to_download} to {local_directory}...")
-
-    modal.volume.get(volume, file_to_download, f"{local_directory}/{file_to_download}")
-
-    print(f"Downloaded {file_to_download} successfully.")
 
 @app.local_entrypoint()
 def main():
     # Run the model and save PDBs
     run_model_and_save_pdbs.remote()
-    # function_call.get()
-
-    # local_dir = local_directory
-
-    # vol = modal.Volume.lookup("hackaton_volume")
-    # os.makedirs(local_dir, exist_ok=True)
-
-    # # List all files in the root of the volume
-    # for file_entry in vol.listdir("/"):  # Use "/" for root
-
-    #     remote_path = file_entry.path  # Use the path attribute directly
-    #     filename = os.path.basename(remote_path)  # Extract just the filename
-    #     local_file_path = os.path.join(local_dir, filename)
-
-    #     with open(local_file_path, "wb") as local_file:
-    #         for chunk in vol.read_file(remote_path):  # No need for folder name here
-    #             local_file.write(chunk)
 
 if __name__ == "__main__":
     main()
