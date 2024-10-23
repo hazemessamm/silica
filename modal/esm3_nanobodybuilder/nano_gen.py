@@ -4,13 +4,6 @@ import pandas as pd
 
 from esm.utils.structure.protein_chain import ProteinChain
 from esm.sdk import client
-# from esm.sdk.api import (
-#     ESMProtein,
-#     GenerationConfig,
-#     LogitsConfig,
-#     SamplingConfig
-# )
-
 from esm.sdk.api import (
     ESM3InferenceClient,
     ESMProtein,
@@ -31,13 +24,19 @@ from pathlib import Path
 
 import torch
 
+# Note! - Forge token is needed to access ESM3 API - ask for this from EvolutionaryScale /
+# Alternatively the small open model is also available through Huggingface,
+# in that case replace this with Huggingface token and change the login below.
+
+_FORGE_TOKEN = "XXX"  # This currently is set to a dummy token, i.e. it will not run, unless changed to an actual token
+
 # Create a Docker container. Here we use the official nvidia pytorch
 # Note that this also takes in the Forge token. Make sure it exists, so that the routine has access to ESM3 API.
 docker_image = (
     modal.Image.from_registry("nvcr.io/nvidia/pytorch:22.12-py3", add_python="3.11")
     .apt_install("git")  # Install git if needed
     .pip_install("huggingface_hub", "esm", "nglview", "plotly", "py3Dmol")  # Install required Python packages
-    .env({"FORGE_TOKEN": "7iLuRQO7n1c1DNMcifs58W"})
+    .env({"FORGE_TOKEN": _FORGE_TOKEN})
 )
 
 # Create or access a Modal volume
