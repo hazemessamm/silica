@@ -1,0 +1,6 @@
+esm
+torch==2.4.1
+transformers==4.45.2
+modal==0.64.178
+biopython==1.84
+deap==1.4.1

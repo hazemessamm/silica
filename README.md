@@ -1,5 +1,26 @@
 # silica
-Silica team repo for BioML hackathon
+Silica team repo for the Evolved-2024 BioML hackathon
+
+## Projects
+
+Projects were split over lipase enzyme and EGFR binding nanobody design.
+Both projects consisted of two main components with the ultimate goal of synthesizing top sequences and providing more wet lab data for various ML methods.
+Candidate Generation:
+This included techniques such as constrained diffusion, inversefolding and genetic algorithms including the use of ESM3. These generated seqs can be found [here](./generated_seqs)
+Candidate ranking/scoring
+This included log probabilites computed by several pretrained methods as well as some structural based metrics over predicted binding compelexes and embedding based distance measures. 
+
+### Lipase
+Methods
+[ProstT5 generation](./modal/prostt5) and [Variant stability prediction](./silica/stability_training.py)
+
+### EGFR Nanobody Binders
+
+Methods
+[ESM3 Example](./esm3) and [ESM3](./modal/esm3_nanobodybuilder) for generation and both a [ESM3 generation and filtering method with nanoBERT embeddings](https://github.com/hazemessamm/silica/tree/vhh-fixed-fr/nanobody_fixed_fr). [AntiFold generation and scoring](./modal/antifold_nanobody). [MPNN inversefolding](./mpnn). [Motif scaffolded diffusion generation](./modal/diffusion_pipeline). [GA candidate generation](./nanobert_ga). [Nanobody structure prediction for self consistency](./modal/nanobodybuilder). [NanoBERT log probability for scoring](./modal/nanobert)
+
+### Scoring for Both Projects
+[ESM2 LP](./modal/esm2) and [ESM3 LP](./modal/esm3)
 
 ## Data
 
